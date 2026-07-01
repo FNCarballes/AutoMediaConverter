@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Media Converter Pro</title>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 0; padding: 20px; background: #1e1e1e; color: #fff; height: 100vh; box-sizing: border-box; }
+        .container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; height: 100%; }
+        .card { background: #2d2d2d; padding: 20px; border-radius: 8px; display: flex; flex-direction: column; }
+        h3 { margin-top: 0; border-bottom: 1px solid #444; padding-bottom: 10px; }
+        
+        button { background: #4CAF50; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; margin-top: 5px; }
+        button:disabled { background: #666; cursor: not-allowed; }
+        button.danger { background: #f44336; padding: 5px 10px; font-size: 12px; margin-top: 5px;}
+        
+        /* Estilos de Drag & Drop */
+        .drop-zone { border: 2px dashed #666; padding: 15px; border-radius: 6px; text-align: center; margin-bottom: 10px; transition: 0.3s; background: #222;}
+        .drop-zone.active { border-color: #4CAF50; background: #2a3b2a; }
+        .path-display { font-size: 12px; color: #aaa; margin-top: 5px; word-break: break-all; }
+        
+        /* Opciones Avanzadas */
+        .options-panel { background: #1a1a1a; padding: 15px; border-radius: 6px; margin: 15px 0; font-size: 14px;}
+        .options-panel select, .options-panel input[type="range"] { margin-bottom: 10px; }
+        
+        #log { flex-grow: 1; overflow-y: auto; background: #111; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px; margin-top: 10px;}
+        .success { color: #4CAF50; } .error { color: #f44336; }
+        
+        .task-item { background: #333; padding: 10px; border-radius: 4px; margin-bottom: 10px; font-size: 12px; border-left: 4px solid #4CAF50;}
+        .task-realtime { border-left-color: #2196F3; }
+        #taskList { flex-grow: 1; overflow-y: auto; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="card">
+        <h3>Configuración y Manual</h3>
+        
+        <!-- Zonas de Drag & Drop -->
+        <div class="drop-zone" id="dropInput">
+            <button id="btnInput">Elegir Origen</button>
+            <div id="inputPath" class="path-display">... o arrastra una carpeta aquí</div>
+        </div>
+        
+        <div class="drop-zone" id="dropOutput">
+            <button id="btnOutput">Elegir Destino</button>
+            <div id="outputPath" class="path-display">... o arrastra una carpeta aquí</div>
+        </div>
+
+        <!-- Opciones Avanzadas -->
+        <div class="options-panel">
+            <strong>Opciones de Conversión:</strong><br><br>
+            <label>Formato: </label>
+            <select id="selFormat">
+                <option value="avif">AVIF (Mejor compresión)</option>
+                <option value="webp">WebP (Más compatible)</option>
+            </select><br>
+            
+            <label>Calidad: <span id="lblQuality">65</span>%</label><br>
+            <input type="range" id="rngQuality" min="1" max="100" value="65" style="width: 100%;"><br>
+            
+            <label><input type="checkbox" id="chkDelete"> Eliminar originales tras convertir</label>
+        </div>
+
+        <button id="btnConvert" disabled style="font-size: 16px;">Convertir Ahora</button>
+        <div id="log"></div>
+    </div>
+
+    <div class="card">
+        <h3>Automatización (Tareas)</h3>
+        <div style="background: #222; padding: 15px; border-radius: 4px; font-size: 14px;">
+            <label><input type="radio" name="modo" value="tiempo_real" checked> ⚡ Vigilar carpeta en tiempo real</label><br><br>
+            <label><input type="radio" name="modo" value="intervalo"> ⏳ Ejecutar cada </label>
+            <input type="number" id="inputDias" value="1" min="1" style="width: 50px;"> días.
+            
+            <br><br>
+            <button id="btnAddTask" disabled style="width: 100%">+ Crear Tarea Automática</button>
+            <p style="font-size: 11px; color: #888; text-align: center;">Las tareas heredarán la Configuración de Conversión elegida a la izquierda.</p>
+        </div>
+
+        <h4 style="margin-bottom: 5px;">Tareas Activas:</h4>
+        <div id="taskList"></div>
+    </div>
+</div>
+
+<script src="./renderer.js"></script>
+</body>
+</html>

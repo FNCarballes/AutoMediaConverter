@@ -1,0 +1,48 @@
+{
+  "name": "media-converter-pro",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "description": "Automatizador de conversiones AVIF/WebP",
+  "author": {
+    "name": "Tony",
+    "email": "franco.ncarballes@gmail.com"
+  },
+  "homepage": "https://github.com/FNCarballes",
+  "build": {
+    "appId": "f.n.c.mediaautomator",
+    "productName": "Media Converter Pro",
+    "directories": {
+      "output": "dist"
+    },
+    "asarUnpack": [
+      "**/node_modules/sharp/**/*",
+      "**/node_modules/@img/**/*"
+    ],
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "build/icon.png"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    }
+  },
+  "keywords": [],
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "chokidar": "^5.0.0",
+    "sharp": "^0.34.5"
+  },
+  "devDependencies": {
+    "electron": "^42.5.1",
+    "electron-builder": "^26.15.3"
+  }
+}
