@@ -11,6 +11,14 @@
     "name": "Tony",
     "email": "franco.ncarballes@gmail.com"
   },
+  "files": [
+    "main.js",
+    "preload.cjs",
+    "renderer.js",
+    "index.html",
+    "assets/**/*",
+    "package.json"
+  ],
   "homepage": "https://github.com/FNCarballes",
   "build": {
     "appId": "f.n.c.mediaautomator",
