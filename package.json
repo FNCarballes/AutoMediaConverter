@@ -41,8 +41,10 @@
       "target": "nsis",
       "icon": "build/icon.ico"
     },
-     "mac": {
-      "target": ["dmg"],
+    "mac": {
+      "target": [
+        "dmg"
+      ],
       "icon": "assets/icon.png"
     }
   },
@@ -50,6 +52,7 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "auto-launch": "^5.0.6",
     "chokidar": "^5.0.0",
     "sharp": "^0.34.5"
   },

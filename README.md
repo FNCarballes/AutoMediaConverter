@@ -1,4 +1,4 @@
- Media Converter Pro (AVIF/WebP Converter)
+ Auto Media Converter (AVIF/WebP Converter)
 Una aplicación de escritorio moderna y de alto rendimiento construida con Electron.js y Node.js. Permite la conversión masiva de imágenes (JPG/PNG) a formatos de nueva generación (AVIF/WebP) mediante procesamiento manual, automatización programada o vigilancia de carpetas en tiempo real.
 
 -   Características Principales

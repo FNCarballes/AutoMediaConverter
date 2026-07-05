@@ -5,6 +5,15 @@ import { existsSync } from 'fs';
 import sharp from 'sharp';
 import chokidar from 'chokidar';
 import { fileURLToPath } from 'url';
+import AutoLaunch from 'auto-launch';
+
+// 1. Configurar auto-launch
+const appAutoLauncher = new AutoLaunch({
+    name: 'Auto Media Converter',
+    path: process.execPath, // Obtiene la ruta del ejecutable automáticamente
+    isHidden: true // Esto añade el flag --hidden al comando de arranque
+});
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,19 +22,33 @@ let mainWindow;
 let tray = null;
 let tasksFilePath;
 let isQuitting = false;
-const activeWatchers = {}; 
+const activeWatchers = {};
 
 function createWindow() {
     mainWindow = new BrowserWindow({
-        width: 1050, height: 750, show: false,
+        width: 1050, height: 750, show: false, // Inicia oculta por defecto
         icon: path.join(__dirname, 'assets', 'icon.png'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.cjs'),
             contextIsolation: true, nodeIntegration: false,
         }
     });
+    
     mainWindow.loadFile('index.html');
-    mainWindow.once('ready-to-show', () => mainWindow.show());
+    
+    mainWindow.once('ready-to-show', () => {
+        // Detectar si el SO la abrió de forma automática
+        const esInicioAutomatico = process.argv.includes('--hidden') || app.getLoginItemSettings().wasOpenedAsHidden;
+        
+        if (!esInicioAutomatico) {
+            // El usuario hizo doble clic en el ícono, mostramos la ventana
+            mainWindow.show();
+        } else {
+            // Arrancó con el sistema. Dejamos la ventana oculta pero avisamos.
+            mostrarNotificacion('Media Converter', 'Iniciado en segundo plano. Vigilando carpetas...');
+        }
+    });
+
     mainWindow.on('close', (event) => {
         if (!isQuitting) { event.preventDefault(); mainWindow.hide(); }
     });
@@ -102,28 +125,28 @@ async function guardarTareas(tareas) { await fs.writeFile(tasksFilePath, JSON.st
 function actualizarWatchers(tareas) {
     // Cerramos los vigilantes anteriores para no duplicar
     Object.values(activeWatchers).forEach(watcher => watcher.close());
-    
+
     const tareasVigiladas = tareas.filter(t => t.modo === 'tiempo_real');
-    
+
     tareasVigiladas.forEach(tarea => {
         // Quitamos awaitWriteFinish. En Linux a veces causa bloqueos con archivos pequeños
-        const watcher = chokidar.watch(tarea.input, { 
-            ignored: /(^|[\/\\])\../, 
-            persistent: true, 
-            depth: 0, 
-            ignoreInitial: true 
+        const watcher = chokidar.watch(tarea.input, {
+            ignored: /(^|[\/\\])\../,
+            persistent: true,
+            depth: 0,
+            ignoreInitial: true
         });
-        
+
         watcher.on('add', async (filePath) => {
             console.log(`[Chokidar] Nuevo archivo detectado: ${filePath}`); // Para debug en terminal
-            
+
             const ext = path.extname(filePath).toLowerCase();
             if (['.jpg', '.jpeg', '.png'].includes(ext)) {
                 try {
                     if (!existsSync(tarea.output)) await fs.mkdir(tarea.output, { recursive: true });
-                    
+
                     const exito = await procesarImagen(filePath, tarea.output, tarea.options);
-                    
+
                     if (exito) {
                         mostrarNotificacion('¡Imagen Procesada!', `Se convirtió: ${path.basename(filePath)}`);
                     } else {
@@ -135,7 +158,7 @@ function actualizarWatchers(tareas) {
                 }
             }
         });
-        
+
         activeWatchers[tarea.id] = watcher;
     });
 }
@@ -162,11 +185,12 @@ async function ejecutarTareasAutomaticas() {
 
 app.whenReady().then(async () => {
     tasksFilePath = path.join(app.getPath('userData'), 'tareas.json');
-    app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true });
-
-    createWindow(); createTray();
+    createWindow(); 
+    createTray();
 
     const tareas = await obtenerTareas();
+    actualizarWatchers(tareas); // Encendemos Chokidar silenciosamente
+    
     setInterval(ejecutarTareasAutomaticas, 60 * 1000);
 });
 
@@ -191,4 +215,34 @@ ipcMain.handle('tasks:delete', async (event, id) => {
     await guardarTareas(tareas);
     actualizarWatchers(tareas);
     return tareas;
+});
+// 2. Crear los manejadores IPC para el Frontend
+// Obtener el estado actual al abrir la app
+ipcMain.handle('settings:getAutoStart', async () => {
+    if (process.platform === 'linux') {
+        return await appAutoLauncher.isEnabled();
+    }
+    // Para Windows y macOS usamos el nativo de Electron
+    return app.getLoginItemSettings().openAtLogin;
+});
+
+// Cambiar el estado según el checkbox del usuario
+ipcMain.handle('settings:toggleAutoStart', async (event, enable) => {
+    try {
+        if (enable) {
+            // Activar en Win/Mac
+            app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true, args: ['--hidden'] });
+            // Activar en Linux
+            if (process.platform === 'linux') await appAutoLauncher.enable();
+        } else {
+            // Desactivar en Win/Mac
+            app.setLoginItemSettings({ openAtLogin: false });
+            // Desactivar en Linux
+            if (process.platform === 'linux') await appAutoLauncher.disable();
+        }
+        return true;
+    } catch (error) {
+        console.error("Error cambiando el inicio automático:", error);
+        return false;
+    }
 });

@@ -12,7 +12,7 @@ const chkDelete = document.getElementById('chkDelete');
 
 const btnAddTask = document.getElementById('btnAddTask');
 const taskList = document.getElementById('taskList');
-
+const chkAutoStart = document.getElementById('chkAutoStart');
 let inputFolder = null;
 let outputFolder = null;
 
@@ -23,6 +23,31 @@ function checkReady() {
     btnConvert.disabled = !ready;
     btnAddTask.disabled = !ready;
 }
+
+async function inicializarAjustes() {
+    // 1. Consultamos si ya está registrado en el sistema operativo
+    const isAutoStartEnabled = await window.api.getAutoStart();
+
+    // 2. Si el sistema dice que FALSE, pero es la primera vez que se abre la app,
+    // forzamos la activación para cumplir con tu regla de "por defecto true".
+    if (!isAutoStartEnabled) {
+        // Verificamos si existe una marca en el localStorage para saber si el usuario lo apagó en el pasado
+        const deshabilitadoPorUsuario = localStorage.getItem('autoStartDesactivado') === 'true';
+
+        if (!deshabilitadoPorUsuario) {
+            // Es el primer arranque de la app: lo activamos en el sistema de fondo
+            await window.api.toggleAutoStart(true);
+            chkAutoStart.checked = true;
+        } else {
+            // El usuario explícitamente lo desmarcó en una sesión anterior
+            chkAutoStart.checked = false;
+        }
+    } else {
+        // Si ya estaba activo en el sistema, se mantiene marcado
+        chkAutoStart.checked = true;
+    }
+}
+
 
 function getOptions() {
     return {
@@ -47,14 +72,14 @@ function setupDragAndDrop(elementId, type) {
     el.addEventListener('dragover', (e) => { e.preventDefault(); el.classList.add('active'); });
     el.addEventListener('dragleave', (e) => { e.preventDefault(); el.classList.remove('active'); });
     el.addEventListener('drop', async (e) => {
-        e.preventDefault(); 
+        e.preventDefault();
         el.classList.remove('active');
-        
+
         if (e.dataTransfer.files.length > 0) {
             const droppedFile = e.dataTransfer.files[0];
-            
+
             const realPath = window.api.getPathForFile(droppedFile);
-            
+
             if (!realPath) {
                 alert("La seguridad del sistema ocultó la ruta. Usa el botón manual.");
                 return;
@@ -67,6 +92,25 @@ function setupDragAndDrop(elementId, type) {
 
 setupDragAndDrop('dropInput', 'input');
 setupDragAndDrop('dropOutput', 'output');
+
+
+chkAutoStart.addEventListener('change', async (e) => {
+    chkAutoStart.disabled = true;
+
+    const estadoActivo = e.target.checked;
+    await window.api.toggleAutoStart(estadoActivo);
+
+    // Si el usuario lo desmarca, guardamos la persistencia local para que la app 
+    // recuerde su decisión y no lo vuelva a activar a la fuerza la próxima vez.
+    if (!estadoActivo) {
+        localStorage.setItem('autoStartDesactivado', 'true');
+    } else {
+        localStorage.removeItem('autoStartDesactivado');
+    }
+
+    chkAutoStart.disabled = false;
+});
+
 
 btnInput.addEventListener('click', async () => {
     const path = await window.api.selectFolder();
@@ -107,19 +151,19 @@ async function renderTareas() {
     }
 
     tareas.forEach(tarea => {
-        const options = tarea.options || { 
-            format: 'avif', 
-            quality: 65, 
-            deleteOriginal: false 
+        const options = tarea.options || {
+            format: 'avif',
+            quality: 65,
+            deleteOriginal: false
         };
 
         const div = document.createElement('div');
         div.className = tarea.modo === 'tiempo_real' ? 'task-item task-realtime' : 'task-item';
-        
-        const modoTexto = tarea.modo === 'tiempo_real' 
-            ? '⚡ Vigilando en tiempo real' 
+
+        const modoTexto = tarea.modo === 'tiempo_real'
+            ? '⚡ Vigilando en tiempo real'
             : `⏳ Cada ${tarea.intervaloDias} día(s)`;
-            
+
         const borrarTexto = options.deleteOriginal ? '<span style="color: #f44336"> (Borrando original)</span>' : '';
 
         div.innerHTML = `
@@ -153,3 +197,4 @@ window.eliminarTarea = async (id) => {
 
 window.api.onTasksUpdated(() => renderTareas());
 renderTareas();
+inicializarAjustes();
