@@ -7,11 +7,9 @@ import chokidar from 'chokidar';
 import { fileURLToPath } from 'url';
 import AutoLaunch from 'auto-launch';
 
-// 1. Configurar auto-launch
 const appAutoLauncher = new AutoLaunch({
     name: 'Auto Media Converter',
-    // Envolvemos la ruta en comillas literales para que Linux la lea entera
-    path: `"${process.execPath}"`, 
+    path: process.execPath, // <-- Sin comillas
     isHidden: true 
 });
 
