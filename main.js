@@ -10,8 +10,9 @@ import AutoLaunch from 'auto-launch';
 // 1. Configurar auto-launch
 const appAutoLauncher = new AutoLaunch({
     name: 'Auto Media Converter',
-    path: process.execPath, // Obtiene la ruta del ejecutable automáticamente
-    isHidden: true // Esto añade el flag --hidden al comando de arranque
+    // Envolvemos la ruta en comillas literales para que Linux la lea entera
+    path: `"${process.execPath}"`, 
+    isHidden: true 
 });
 
 

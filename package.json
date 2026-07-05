@@ -35,7 +35,8 @@
         "AppImage",
         "deb"
       ],
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "executableName": "auto-media-converter"
     },
     "win": {
       "target": "nsis",
