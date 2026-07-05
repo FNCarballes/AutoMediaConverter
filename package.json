@@ -1,5 +1,5 @@
 {
-  "name": "media-converter-pro",
+  "name": "auto-media-converter",
   "version": "1.0.0",
   "main": "main.js",
   "scripts": {
@@ -21,8 +21,8 @@
   ],
   "homepage": "https://github.com/FNCarballes",
   "build": {
-    "appId": "f.n.c.mediaautomator",
-    "productName": "Media Converter Pro",
+    "appId": "f.n.c.automediaconverter",
+    "productName": "Auto Media Converter",
     "directories": {
       "output": "dist"
     },
