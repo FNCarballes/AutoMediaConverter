@@ -5,15 +5,7 @@ import { existsSync } from 'fs';
 import sharp from 'sharp';
 import chokidar from 'chokidar';
 import { fileURLToPath } from 'url';
-import AutoLaunch from 'auto-launch';
-
-const appAutoLauncher = new AutoLaunch({
-    name: 'Auto Media Converter',
-    path: process.execPath, // <-- Sin comillas
-    isHidden: true 
-});
-
-
+import os from 'os';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -22,6 +14,35 @@ let tray = null;
 let tasksFilePath;
 let isQuitting = false;
 const activeWatchers = {};
+
+
+const linuxAutostartFile = path.join(app.getPath('appData'), 'autostart', 'auto-media-converter.desktop');
+
+// 2. Función manual para manejar el autostart en Linux
+async function manageLinuxAutoStart(enable) {
+    if (enable) {
+        const autostartDir = path.dirname(linuxAutostartFile);
+        if (!existsSync(autostartDir)) {
+            await fs.mkdir(autostartDir, { recursive: true });
+        }
+
+        const desktopContent = `[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Auto Media Converter
+Comment=Second plane execution
+Exec="${process.execPath}" --hidden
+StartupNotify=false
+Terminal=false`;
+
+        await fs.writeFile(linuxAutostartFile, desktopContent.trim());
+    } else {
+        if (existsSync(linuxAutostartFile)) {
+            await fs.unlink(linuxAutostartFile);
+        }
+    }
+}
+
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -32,13 +53,13 @@ function createWindow() {
             contextIsolation: true, nodeIntegration: false,
         }
     });
-    
+
     mainWindow.loadFile('index.html');
-    
+
     mainWindow.once('ready-to-show', () => {
         // Detectar si el SO la abrió de forma automática
         const esInicioAutomatico = process.argv.includes('--hidden') || app.getLoginItemSettings().wasOpenedAsHidden;
-        
+
         if (!esInicioAutomatico) {
             // El usuario hizo doble clic en el ícono, mostramos la ventana
             mainWindow.show();
@@ -88,6 +109,13 @@ async function procesarImagen(rutaEntrada, outputFolder, options, eventSender = 
 
         await procesador.toFile(rutaSalida);
 
+        if (options.deleteOriginal) {
+            try {
+                await fs.unlink(rutaEntrada);
+            } catch (deleteErr) {
+                console.error(`No se pudo eliminar el original ${archivo}:`, deleteErr);
+            }
+        }
 
         if (eventSender) {
             eventSender.send('conversion:progress', { status: 'success', message: `✓ ${archivo} -> ${nombrePuro}.${extension}` });
@@ -99,20 +127,53 @@ async function procesarImagen(rutaEntrada, outputFolder, options, eventSender = 
     }
 }
 
-async function procesarCarpetas(inputFolder, outputFolder, options, eventSender = null) {
+
+async function procesarEntradas(rutas, outputFolder, options, eventSender = null) {
     if (!existsSync(outputFolder)) await fs.mkdir(outputFolder, { recursive: true });
     const extensionesPermitidas = ['.jpg', '.jpeg', '.png'];
-    const archivos = await fs.readdir(inputFolder);
-    const imagenes = archivos.filter(a => extensionesPermitidas.includes(path.extname(a).toLowerCase()));
+    
+    let listaFinalImagenes = [];
+    let totalProcesadas = 0;
 
-    if (imagenes.length === 0) return { success: true, total: 0 };
+    // 1. Clasificar y aplanar todas las rutas recibidas
+    for (const ruta of rutas) {
+        try {
+            const info = await fs.stat(ruta);
+            
+            if (info.isDirectory()) {
+                // Si es una carpeta, leemos su interior y filtramos las imágenes
+                const archivos = await fs.readdir(ruta);
+                const imagenesDeCarpeta = archivos
+                    .filter(a => extensionesPermitidas.includes(path.extname(a).toLowerCase()))
+                    .map(a => path.join(ruta, a)); // Convertimos a ruta absoluta
+                
+                listaFinalImagenes.push(...imagenesDeCarpeta);
+            } else if (info.isFile()) {
+                // Si es un archivo suelto, verificamos su extensión directamente
+                if (extensionesPermitidas.includes(path.extname(ruta).toLowerCase())) {
+                    listaFinalImagenes.push(ruta);
+                }
+            }
+        } catch (err) {
+            console.error(`Error al analizar la ruta ${ruta}:`, err);
+        }
+    }
 
-    let procesadas = 0;
-    await Promise.all(imagenes.map(async (archivo) => {
-        const exito = await procesarImagen(path.join(inputFolder, archivo), outputFolder, options, eventSender);
-        if (exito) procesadas++;
-    }));
-    return { success: true, total: procesadas };
+    if (listaFinalImagenes.length === 0) return { success: true, total: 0 };
+
+    // 2. Procesar el lote final con la concurrencia inteligente de tu CPU
+    const CONCURRENCIA_MAXIMA = os.cpus().length || 4;
+    
+    for (let i = 0; i < listaFinalImagenes.length; i += CONCURRENCIA_MAXIMA) {
+        const lote = listaFinalImagenes.slice(i, i + CONCURRENCIA_MAXIMA);
+        
+        await Promise.all(lote.map(async (rutaImg) => {
+            const exito = await procesarImagen(rutaImg, outputFolder, options, eventSender);
+            if (exito) totalProcesadas++;
+        }));
+    }
+
+    return { success: true, total: totalProcesadas };
 }
 
 async function obtenerTareas() {
@@ -170,7 +231,7 @@ async function ejecutarTareasAutomaticas() {
     for (let tarea of tareas.filter(t => t.modo === 'intervalo')) {
         const msIntervalo = tarea.intervaloDias * 24 * 60 * 60 * 1000;
         if (!tarea.ultimoRun || (ahora - tarea.ultimoRun) >= msIntervalo) {
-            const result = await procesarCarpetas(tarea.input, tarea.output, tarea.options);
+            const result = await procesarEntradas(tarea.input, tarea.output, tarea.options);
             if (result.total > 0) mostrarNotificacion('Automatización Completada', `Se procesaron ${result.total} imágenes.`);
             tarea.ultimoRun = ahora;
             tareasActualizadas = true;
@@ -182,23 +243,46 @@ async function ejecutarTareasAutomaticas() {
     }
 }
 
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+    // Si ya hay otra instancia corriendo, cerramos esta inmediatamente
+    app.quit();
+} else {
+    // Si somos la instancia principal, escuchamos si alguien intenta abrir una segunda
+    app.on('second-instance', (event, commandLine, workingDirectory) => {
+        // Alguien intentó abrir la app de nuevo. Restauramos y enfocamos nuestra ventana.
+        if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.show();
+            mainWindow.focus();
+        }
+    });
+
 app.whenReady().then(async () => {
     tasksFilePath = path.join(app.getPath('userData'), 'tareas.json');
-    createWindow(); 
+    createWindow();
     createTray();
 
     const tareas = await obtenerTareas();
     actualizarWatchers(tareas); // Encendemos Chokidar silenciosamente
-    
+
     setInterval(ejecutarTareasAutomaticas, 60 * 1000);
-});
+});}
 
 ipcMain.handle('utils:checkDirectory', async (e, p) => { try { return (await fs.stat(p)).isDirectory(); } catch { return false; } });
-ipcMain.handle('dialog:openDirectory', async () => {
-    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory'] });
-    return canceled ? null : filePaths[0];
+ipcMain.handle('dialog:openMixed', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+        // La magia está aquí: permitimos archivos, carpetas y selección múltiple
+        properties: ['openFile', 'openDirectory', 'multiSelections'],
+        filters: [
+            { name: 'Imágenes Soportadas', extensions: ['jpg', 'jpeg', 'png'] }
+        ]
+    });
+    // Ahora devolvemos un arreglo de rutas (pueden ser archivos sueltos o carpetas)
+    return canceled ? null : filePaths; 
 });
-ipcMain.handle('image:convert', async (event, data) => await procesarCarpetas(data.inputFolder, data.outputFolder, data.options, event.sender));
+ipcMain.handle('image:convert', async (event, data) => await procesarEntradas(data.inputFolder, data.outputFolder, data.options, event.sender));
 ipcMain.handle('tasks:get', async () => await obtenerTareas());
 ipcMain.handle('tasks:add', async (event, tarea) => {
     const tareas = await obtenerTareas();
@@ -219,25 +303,22 @@ ipcMain.handle('tasks:delete', async (event, id) => {
 // Obtener el estado actual al abrir la app
 ipcMain.handle('settings:getAutoStart', async () => {
     if (process.platform === 'linux') {
-        return await appAutoLauncher.isEnabled();
+        return existsSync(linuxAutostartFile);
     }
-    // Para Windows y macOS usamos el nativo de Electron
     return app.getLoginItemSettings().openAtLogin;
 });
 
-// Cambiar el estado según el checkbox del usuario
 ipcMain.handle('settings:toggleAutoStart', async (event, enable) => {
     try {
-        if (enable) {
-            // Activar en Win/Mac
-            app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true, args: ['--hidden'] });
-            // Activar en Linux
-            if (process.platform === 'linux') await appAutoLauncher.enable();
+        if (process.platform === 'linux') {
+            await manageLinuxAutoStart(enable);
         } else {
-            // Desactivar en Win/Mac
-            app.setLoginItemSettings({ openAtLogin: false });
-            // Desactivar en Linux
-            if (process.platform === 'linux') await appAutoLauncher.disable();
+            // Lógica para Windows y macOS
+            app.setLoginItemSettings({
+                openAtLogin: enable,
+                openAsHidden: enable,
+                args: enable ? ['--hidden'] : []
+            });
         }
         return true;
     } catch (error) {

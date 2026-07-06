@@ -6,7 +6,7 @@ contextBridge.exposeInMainWorld('api', {
         return file.path; // Respaldo para versiones antiguas de Electron
     },
 
-    selectFolder: () => ipcRenderer.invoke('dialog:openDirectory'),
+    selectFolder: () => ipcRenderer.invoke('dialog:openMixed'),
     checkDirectory: (path) => ipcRenderer.invoke('utils:checkDirectory', path),
     convertImages: (data) => ipcRenderer.invoke('image:convert', data),
 
